@@ -1,5 +1,16 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Upload, Trash2, Download, Package, Settings, Image as ImageIcon, Layers, Loader2, AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext } from 'react';
+import { Upload, Trash2, Download, Package, Settings, Image as ImageIcon, Layers, Loader2, AlertCircle, CheckCircle2, Info, Globe } from 'lucide-react';
+import { translations } from './i18n.js';
+
+// ============================================================================
+// Language Context
+// ============================================================================
+
+const LangContext = createContext(null);
+
+function useLang() {
+  return useContext(LangContext);
+}
 
 // ============================================================================
 // MaxRects Bin Packing Algorithm
@@ -524,6 +535,10 @@ const DEFAULT_OPTIONS = {
 };
 
 export default function App() {
+  const [lang, setLang] = useState('zh');
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const t = translations[lang];
+
   const [images, setImages] = useState([]);
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [sheets, setSheets] = useState([]);
@@ -533,6 +548,19 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
   const previewCanvasRef = useRef(null);
+  const langMenuRef = useRef(null);
+
+  // Close language menu when clicking outside
+  useEffect(() => {
+    if (!langMenuOpen) return;
+    const handler = (e) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(e.target)) {
+        setLangMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [langMenuOpen]);
 
   // Handle file uploads - supports both direct files and directory drops
   const handleFiles = useCallback(async (fileList) => {
@@ -541,7 +569,7 @@ export default function App() {
     try {
       const files = Array.from(fileList).filter((f) => f.type === 'image/png' || f.name.toLowerCase().endsWith('.png'));
       if (files.length === 0) {
-        setStatus({ type: 'error', message: 'No PNG files found.' });
+        setStatus({ type: 'error', message: t.noPngFound });
         setLoading(false);
         return;
       }
@@ -552,12 +580,12 @@ export default function App() {
         const newOnes = loaded.filter((i) => !existing.has(i.name));
         return [...prev, ...newOnes];
       });
-      setStatus({ type: 'success', message: `Loaded ${loaded.length} image${loaded.length > 1 ? 's' : ''}.` });
+      setStatus({ type: 'success', message: t.loadedImages(loaded.length) });
     } catch (err) {
       setStatus({ type: 'error', message: err.message });
     }
     setLoading(false);
-  }, []);
+  }, [t]);
 
   // Drag-and-drop support including directories
   const handleDrop = useCallback(async (e) => {
@@ -592,7 +620,7 @@ export default function App() {
   // Main pack action
   const pack = useCallback(async () => {
     if (images.length === 0) {
-      setStatus({ type: 'error', message: 'Add some images first.' });
+      setStatus({ type: 'error', message: t.addImagesFirst });
       return;
     }
     setLoading(true);
@@ -606,14 +634,14 @@ export default function App() {
       const totalSprites = result.reduce((sum, s) => sum + s.sprites.length, 0);
       setStatus({
         type: 'success',
-        message: `Packed ${totalSprites} sprite${totalSprites > 1 ? 's' : ''} into ${result.length} sheet${result.length > 1 ? 's' : ''}.`,
+        message: t.packSuccess(totalSprites, result.length),
       });
     } catch (err) {
       setStatus({ type: 'error', message: err.message });
       setSheets([]);
     }
     setLoading(false);
-  }, [images, options]);
+  }, [images, options, t]);
 
   // Render active sheet to the preview canvas
   useEffect(() => {
@@ -659,7 +687,7 @@ export default function App() {
       a.download = `${baseName}.zip`;
       a.click();
       URL.revokeObjectURL(url);
-      setStatus({ type: 'success', message: `Downloaded ${baseName}.zip` });
+      setStatus({ type: 'success', message: t.downloaded(`${baseName}.zip`) });
     } catch (err) {
       setStatus({ type: 'error', message: err.message });
     }
@@ -687,6 +715,7 @@ export default function App() {
   }, [sheets]);
 
   return (
+    <LangContext.Provider value={t}>
     <div className="min-h-screen bg-[#0e1015] text-[#d4d8e0] font-mono">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Fraunces:wght@400;500;600;700;800&display=swap');
@@ -719,11 +748,44 @@ export default function App() {
           </div>
           <div>
             <h1 className="display-font text-xl font-semibold text-white tracking-tight">Texture Packer</h1>
-            <p className="text-[10px] text-[#6b7280] uppercase tracking-widest">Cocos Creator · Web Tool</p>
+            <p className="text-[10px] text-[#6b7280] uppercase tracking-widest">{t.appSubtitle}</p>
           </div>
         </div>
-        <div className="text-xs text-[#6b7280]">
-          {images.length > 0 && <span>{images.length} image{images.length > 1 ? 's' : ''} loaded</span>}
+        <div className="flex items-center gap-4">
+          <div className="text-xs text-[#6b7280]">
+            {images.length > 0 && <span>{t.imagesLoaded(images.length)}</span>}
+          </div>
+          {/* Language Switcher */}
+          <div className="relative" ref={langMenuRef}>
+            <button
+              onClick={() => setLangMenuOpen((o) => !o)}
+              className="flex items-center gap-1.5 text-[#6b7280] hover:text-[#d4d8e0] transition px-2 py-1 rounded hover:bg-[#1a1d24]"
+              title={t.language}
+            >
+              <Globe size={14} />
+              <span className="text-xs">{lang === 'zh' ? t.langZh : t.langEn}</span>
+            </button>
+            {langMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-[#1a1d24] border border-[#2a2f3a] rounded shadow-lg z-50 min-w-[100px] overflow-hidden">
+                {[
+                  { key: 'zh', label: translations.zh.langZh },
+                  { key: 'en', label: translations.en.langEn },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => { setLang(key); setLangMenuOpen(false); }}
+                    className={`w-full text-left px-3 py-2 text-xs transition ${
+                      lang === key
+                        ? 'text-[#ff8c42] bg-[#ff8c42]/10'
+                        : 'text-[#9ca3af] hover:bg-[#22262f] hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -733,11 +795,11 @@ export default function App() {
           <div className="px-4 py-3 border-b border-[#1f232d] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ImageIcon size={14} className="text-[#6b7280]" />
-              <span className="text-xs uppercase tracking-wider text-[#9ca3af] font-semibold">Sprites</span>
+              <span className="text-xs uppercase tracking-wider text-[#9ca3af] font-semibold">{t.sprites}</span>
             </div>
             {images.length > 0 && (
               <button onClick={clearAll} className="text-[10px] text-[#6b7280] hover:text-[#d64545] uppercase tracking-wider transition">
-                Clear
+                {t.clear}
               </button>
             )}
           </div>
@@ -753,8 +815,8 @@ export default function App() {
             onDrop={handleDrop}
           >
             <Upload size={20} className="mx-auto mb-2 text-[#6b7280]" />
-            <p className="text-xs text-[#9ca3af] mb-1">Drop PNGs or folders here</p>
-            <p className="text-[10px] text-[#6b7280]">or click to browse</p>
+            <p className="text-xs text-[#9ca3af] mb-1">{t.dropZoneMain}</p>
+            <p className="text-[10px] text-[#6b7280]">{t.dropZoneClick}</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -768,8 +830,8 @@ export default function App() {
           {/* Image List */}
           <div className="flex-1 overflow-y-auto custom-scroll px-3 pb-3">
             {images.length === 0 ? (
-              <p className="text-[11px] text-[#4b5260] text-center mt-8 leading-relaxed">
-                No sprites yet.<br />Drag in a folder to begin.
+              <p className="text-[11px] text-[#4b5260] text-center mt-8 leading-relaxed whitespace-pre-line">
+                {t.noSprites}
               </p>
             ) : (
               <ul className="space-y-1">
@@ -799,7 +861,7 @@ export default function App() {
           <div className="border-b border-[#1f232d] bg-[#12151c] px-4 py-2 flex items-center gap-3 flex-shrink-0">
             <div className="flex items-center gap-2">
               <Layers size={14} className="text-[#6b7280]" />
-              <span className="text-xs uppercase tracking-wider text-[#9ca3af] font-semibold">Preview</span>
+              <span className="text-xs uppercase tracking-wider text-[#9ca3af] font-semibold">{t.preview}</span>
             </div>
             <div className="flex-1 flex items-center gap-1 overflow-x-auto custom-scroll">
               {sheets.length > 0 && sheets.map((sheet, i) => (
@@ -812,15 +874,15 @@ export default function App() {
                       : 'bg-[#1a1d24] text-[#9ca3af] hover:bg-[#22262f]'
                   }`}
                 >
-                  Sheet {i} · {sheet.width}×{sheet.height}
+                  {t.sheet} {i} · {sheet.width}×{sheet.height}
                 </button>
               ))}
             </div>
             {stats && (
               <div className="text-[10px] text-[#6b7280] flex gap-4 flex-shrink-0">
-                <span><span className="text-[#9ca3af]">{stats.sheets}</span> sheets</span>
-                <span><span className="text-[#9ca3af]">{stats.sprites}</span> sprites</span>
-                <span><span className="text-[#9ca3af]">{stats.utilization}%</span> utilized</span>
+                <span><span className="text-[#9ca3af]">{stats.sheets}</span> {t.sheets}</span>
+                <span><span className="text-[#9ca3af]">{stats.sprites}</span> {t.spritesCount}</span>
+                <span><span className="text-[#9ca3af]">{stats.utilization}%</span> {t.utilized}</span>
               </div>
             )}
           </div>
@@ -832,8 +894,8 @@ export default function App() {
                 <div className="w-16 h-16 mx-auto mb-4 rounded border-2 border-dashed border-[#2a2f3a] flex items-center justify-center">
                   <Package size={24} className="text-[#3a4050]" />
                 </div>
-                <p className="display-font text-lg text-[#6b7280] mb-2">Ready to pack.</p>
-                <p className="text-xs text-[#4b5260]">Configure options on the right, then hit Pack.</p>
+                <p className="display-font text-lg text-[#6b7280] mb-2">{t.readyTitle}</p>
+                <p className="text-xs text-[#4b5260]">{t.readyHint}</p>
               </div>
             ) : (
               <div className="checkerboard rounded border border-[#1f232d] shadow-2xl inline-block">
@@ -861,12 +923,12 @@ export default function App() {
         <aside className="w-80 border-l border-[#1f232d] bg-[#12151c] flex flex-col">
           <div className="px-4 py-3 border-b border-[#1f232d] flex items-center gap-2">
             <Settings size={14} className="text-[#6b7280]" />
-            <span className="text-xs uppercase tracking-wider text-[#9ca3af] font-semibold">Settings</span>
+            <span className="text-xs uppercase tracking-wider text-[#9ca3af] font-semibold">{t.settings}</span>
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scroll p-4 space-y-5">
             {/* Atlas Name */}
-            <OptionField label="Atlas Name">
+            <OptionField label={t.atlasName}>
               <input
                 type="text"
                 value={options.atlasName}
@@ -877,7 +939,7 @@ export default function App() {
             </OptionField>
 
             {/* Max Size */}
-            <OptionField label="Max Sheet Size" hint="Maximum width/height of a single sheet">
+            <OptionField label={t.maxSheetSize} hint={t.maxSheetSizeHint}>
               <div className="grid grid-cols-4 gap-1">
                 {[512, 1024, 2048, 4096].map((size) => (
                   <button
@@ -905,32 +967,32 @@ export default function App() {
             </OptionField>
 
             {/* Padding */}
-            <OptionField label="Padding" hint="Space between sprites (px)">
+            <OptionField label={t.padding} hint={t.paddingHint}>
               <SliderInput value={options.padding} min={0} max={20} onChange={(v) => setOptions({ ...options, padding: v })} />
             </OptionField>
 
             {/* Extrude */}
-            <OptionField label="Extrude" hint="Repeat edge pixels to prevent UV bleeding">
+            <OptionField label={t.extrude} hint={t.extrudeHint}>
               <SliderInput value={options.extrude} min={0} max={4} onChange={(v) => setOptions({ ...options, extrude: v })} />
             </OptionField>
 
             {/* Toggles */}
             <div className="space-y-2 pt-2 border-t border-[#1f232d]">
               <Toggle
-                label="Trim transparent pixels"
-                hint="Remove empty space around sprites"
+                label={t.trimLabel}
+                hint={t.trimHint}
                 checked={options.trim}
                 onChange={(v) => setOptions({ ...options, trim: v })}
               />
               <Toggle
-                label="Allow rotation"
-                hint="Rotate 90° for tighter packing"
+                label={t.allowRotation}
+                hint={t.allowRotationHint}
                 checked={options.allowRotation}
                 onChange={(v) => setOptions({ ...options, allowRotation: v })}
               />
               <Toggle
-                label="Power of 2"
-                hint="Force sheet size to 2^n (256, 512, 1024…)"
+                label={t.powerOfTwo}
+                hint={t.powerOfTwoHint}
                 checked={options.powerOfTwo}
                 onChange={(v) => setOptions({ ...options, powerOfTwo: v })}
               />
@@ -945,7 +1007,7 @@ export default function App() {
               className="w-full bg-[#ff8c42] hover:bg-[#ff9a5a] disabled:bg-[#2a2f3a] disabled:text-[#6b7280] text-[#0e1015] font-semibold text-xs uppercase tracking-wider py-2.5 rounded transition flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 size={14} className="animate-spin" /> : <Package size={14} />}
-              Pack Sprites
+              {t.packSprites}
             </button>
             <button
               onClick={downloadZip}
@@ -953,12 +1015,13 @@ export default function App() {
               className="w-full border border-[#2a2f3a] hover:border-[#ff8c42] hover:text-[#ff8c42] disabled:border-[#1f232d] disabled:text-[#4b5260] disabled:hover:border-[#1f232d] disabled:hover:text-[#4b5260] text-[#9ca3af] text-xs uppercase tracking-wider py-2.5 rounded transition flex items-center justify-center gap-2"
             >
               <Download size={14} />
-              Download ZIP
+              {t.downloadZip}
             </button>
           </div>
         </aside>
       </div>
     </div>
+    </LangContext.Provider>
   );
 }
 
